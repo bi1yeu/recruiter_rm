@@ -149,6 +149,7 @@ def get_recruiter_name_and_company(email_text: str):
     Email:
     '''
     {email_text}
+
     '''
 
     Response:
