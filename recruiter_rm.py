@@ -15,7 +15,7 @@ from imap_tools import MailBox, MailMessage, MailMessageFlags
 
 import openai
 
-IS_PROD = bool(os.getenv("IS_PROD"))
+IS_PROD = bool(int(os.getenv("IS_PROD", 0)))
 SIGNATURE = os.getenv("SIGNATURE")
 
 
