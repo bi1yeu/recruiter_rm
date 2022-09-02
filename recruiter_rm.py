@@ -102,6 +102,11 @@ def send_response(mailer: Mailer, recruiter_email: MailMessage):
 
         response_body = textwrap.dedent(response) + quoted_original
 
+
+        if not IS_PROD:
+            print(response_body)
+            return
+
         mailer.compose_and_send_mail(
             subject=f"Re:{recruiter_email.subject}",
             in_reply_to=recruiter_email.headers["message-id"][0],
