@@ -23,3 +23,5 @@ Copy the `.env.sample` file to `.env`, and fill out the configuration environmen
 source .env && python recruiter_rm.py
 ```
 
+## Learn more
+You can learn more on my blog: [Responding to recruiter emails with GPT-3](https://matthewbilyeu.com/blog/2022-09-01/responding-to-recruiter-emails-with-gpt-3).
