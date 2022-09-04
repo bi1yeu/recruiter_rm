@@ -5,9 +5,13 @@ Automatically responds to recruiter's emails with a courtesy message.
 """
 
 import json
-import textwrap
 import os
+import re
 import smtplib
+import sys
+import textwrap
+import time
+import traceback
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -15,8 +19,12 @@ from imap_tools import MailBox, MailMessage, MailMessageFlags
 
 import openai
 
-IS_PROD = bool(int(os.getenv("IS_PROD", 0)))
+
+# TODO configuration file?
+DRY_RUN = bool(int(os.getenv("DRY_RUN", "1")))
+BYPASS_OPENAI = bool(int(os.getenv("BYPASS_OPENAI", "0")))
 SIGNATURE = os.getenv("SIGNATURE")
+GRACE_PERIOD_SECS = 5
 
 
 class Mailer:
@@ -55,13 +63,21 @@ class Mailer:
 
         message.attach(MIMEText(body))
 
-        self.smtp_mailbox.sendmail(
-            from_addr,
-            to_addrs,
-            message.as_string(),
-        )
+        print("Generated response email:")
+        print(message.as_string(), flush=True)
+        print(f"Going to send this email in {GRACE_PERIOD_SECS} seconds...")
+        time.sleep(GRACE_PERIOD_SECS)
 
-        self.save_to_sent_folder(message)
+        if not DRY_RUN:
+            self.smtp_mailbox.sendmail(
+                from_addr,
+                to_addrs,
+                message.as_string(),
+            )
+            self.save_to_sent_folder(message)
+            print("Sent email")
+        else:
+            print("DRY_RUN; not sending email")
 
     def get_recruiter_emails(self):
         """Gets all unprocessed recruiter emails from the Recruitment folder."""
@@ -102,11 +118,6 @@ def send_response(mailer: Mailer, recruiter_email: MailMessage):
 
         response_body = textwrap.dedent(response) + quoted_original
 
-
-        if not IS_PROD:
-            print(response_body)
-            return
-
         mailer.compose_and_send_mail(
             subject=f"Re:{recruiter_email.subject}",
             in_reply_to=recruiter_email.headers["message-id"][0],
@@ -115,11 +126,14 @@ def send_response(mailer: Mailer, recruiter_email: MailMessage):
             body=response_body,
         )
 
-        mailer.move_to_done(recruiter_email)
+        if not DRY_RUN:
+            mailer.move_to_done(recruiter_email)
 
-    except Exception as expn:
-        print(expn)
-        print("Error creating/sending response email!")
+    except Exception:
+        # TODO use logging module throughout
+        print("Error creating/sending response email! Skipping")
+        traceback.print_exc()
+        print("Recruiter email:")
         print(recruiter_email.text)
 
 
@@ -130,8 +144,12 @@ def respond_to_recruitment_emails(mailer: Mailer):
 
     emails = mailer.get_recruiter_emails()
 
-    for email in emails:
+    print(f"Going to respond to {len(emails)} emails")
+
+    for index, email in enumerate(emails):
+        print(f"Responding to email {index + 1} of {len(emails)}...")
         send_response(mailer, email)
+        print("Done")
 
 
 def get_recruiter_name_and_company(email_text: str):
@@ -160,8 +178,9 @@ def get_recruiter_name_and_company(email_text: str):
     Response:
     """
 
-    # don't make expensive OpenAI API calls unless operating in production
-    if not IS_PROD:
+    # consider disabling expensive OpenAI calls in development if not relevant
+    if BYPASS_OPENAI:
+        print("Bypassing OpenAI API, mocking data")
         return json.loads('{"name": "Steve", "company": "Apple"}')
 
     completion = openai.Completion.create(
@@ -171,11 +190,35 @@ def get_recruiter_name_and_company(email_text: str):
         temperature=0,
     )
 
-    return json.loads(completion.choices[0].text)
+    try:
+        # If we end up needing more cleaning to ensure the response can be parsed,
+        # consider improving the prompt.
+        json_str_response = completion.choices[0].text
+        json_str_response_clean = re.search(r".*(\{.*\})", json_str_response).groups()[
+            0
+        ]
+
+        return json.loads(json_str_response_clean)
+    except (AttributeError, json.decoder.JSONDecodeError) as exception:
+        print("Could not decode completion response from OpenAI:")
+        print(completion)
+        raise exception
 
 
 def main():
     """Entrypoint"""
+
+    if not DRY_RUN and BYPASS_OPENAI:
+        print(
+            "BYPASS_OPENAI can only be used w/ DRY_RUN to avoid sending emails with canned data."
+        )
+        sys.exit(1)
+
+    if DRY_RUN:
+        print("DRY_RUN mode on")
+
+    if BYPASS_OPENAI:
+        print("BYPASS_OPENAI mode on")
 
     openai.organization = os.getenv("OPENAI_ORG")
     openai.api_key = os.getenv("OPENAI_SECRET_KEY")
