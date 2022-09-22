@@ -66,7 +66,9 @@ class Mailer:
         print("Generated response email:")
         print(message.as_string(), flush=True)
         print(f"Going to send this email in {GRACE_PERIOD_SECS} seconds...")
-        time.sleep(GRACE_PERIOD_SECS)
+
+        if not DRY_RUN:
+            time.sleep(GRACE_PERIOD_SECS)
 
         if not DRY_RUN:
             self.smtp_mailbox.sendmail(
@@ -79,10 +81,20 @@ class Mailer:
         else:
             print("DRY_RUN; not sending email")
 
+    def _is_reply(self, mail_message: MailMessage):
+        return "in-reply-to" in [header.lower() for header in mail_message.headers]
+
     def get_recruiter_emails(self):
         """Gets all unprocessed recruiter emails from the Recruitment folder."""
         self.imap_mailbox.folder.set(os.getenv("MAILBOX_RECRUITMENT_FOLDER"))
-        return list(self.imap_mailbox.fetch())
+        all_recruiter_emails = list(self.imap_mailbox.fetch())
+
+        filtered_messages = []
+        for mail_message in all_recruiter_emails:
+            if not self._is_reply(mail_message):
+                filtered_messages.append(mail_message)
+
+        return filtered_messages
 
     def move_to_done(self, email):
         """After processing a message, used to move message to Done folder."""
@@ -150,6 +162,9 @@ def respond_to_recruitment_emails(mailer: Mailer):
         print(f"Responding to email {index + 1} of {len(emails)}...")
         send_response(mailer, email)
         print("Done")
+        print(
+            "--------------------------------------------------------------------------------"
+        )
 
 
 def get_recruiter_name_and_company(email_text: str):
