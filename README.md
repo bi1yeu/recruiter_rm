@@ -41,7 +41,7 @@ The program will use GPT-3 to extract the relevant info (recruiter name and comp
 > Hi Ernest,
 >
 > Thanks for reaching out! I'm not interested in new opportunities at this time, but I'll keep Endurance in mind for the future.
-
+>
 > Thanks again,
 > Perce Blackborow
 
